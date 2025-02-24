@@ -2,12 +2,22 @@
 import express from 'express';  // Express Framework
 import fetch from 'node-fetch'; // fetch API für Node.js
 import dotenv from 'dotenv';  // dotenv Paket für Umgebungsvariablen
-dotenv.config();  // liest die .env-Datei ein
 import cors from 'cors'; // CORS für Cross-Origin-Requests
 
+dotenv.config();  // liest die .env-Datei ein
 const app = express(); // Erstellt eine Express-Anwendung
 app.use(cors()); // CORS Middleware aktivieren
 const API_KEY = process.env.API_KEY; // API-Schlüssel aus der .env-Datei laden
+
+// cache-Objekt, in dem wir pro Liga die zuletzt geholten Daten ablegen
+const cache = {
+  'bundesliga': null,
+  'premier-league': null,
+  'la-liga': null,
+  'serie-a': null,
+  'ligue-1': null,
+  'champions-league': null
+};
 
 const leagues = [
   { name: 'bundesliga', id: 2002 },
@@ -18,20 +28,40 @@ const leagues = [
   { name: 'champions-league', id: 2001 }
 ];
 
-leagues.forEach(league => {
-  app.get(`/${league.name}/matches`, async (req, res) => { // Definiert den GET-Endpunkt den das Frontend aufrufen kann
+// Fetch Funktion für das Aktualisieren des Caches
+async function updateCache() {
+  for (const league of leagues) {
     try {
       const response = await fetch(`https://api.football-data.org/v4/competitions/${league.id}/matches`, {
         headers: { 'X-Auth-Token': API_KEY }
       });
-      const data = await response.json(); // Speichert die Response als JS Objekt
-      res.json(data); // Gibt die Response als JSON zurück (an den Client)
-    } catch (error) {
-      console.error(error); // Fehler in der Konsole ausgeben
-      res.status(500).json({ error: `Fehler beim Abrufen der Daten für ${league.name}` }); // Statuscode und Fehlermeldung als JSON an den Client senden
+      const data = await response.json();
+      
+      // Im cache-Objekt ablegen
+      cache[league.name] = data;
+    } catch (err) {
+      console.error(`Fehler beim Aktualisieren von ${league.name}:`, err);
     }
+  }
+}
+
+// Bei Serverstart einmal initial aufrufen
+updateCache();
+
+// Dann alle 60 Sekunden neu fetchen
+setInterval(updateCache, 60_000);
+
+// Get Endpunkt für jede Liga definieren
+leagues.forEach(league => {
+  app.get(`/${league.name}/matches`, (req, res) => {
+    const data = cache[league.name];
+    if (!data) {
+      return res.status(503).json({ error: `Noch keine Daten für ${league.name} im Cache` });
+    }
+    res.json(data); // Daten aus dem Cache zurückgeben
   });
 });
+
 
 // Port definieren 
 const PORT = process.env.PORT || 3000; // Port auf Umgebungsvariable (vom Hosting Anbieter vergeben) oder lokal auf 3000 setzen
