@@ -141,6 +141,17 @@ theSportsDbLeagues.forEach(league => {
   });
 });
 
+// Get Endpunkt für Liga Saison definieren
+theSportsDbLeagues.forEach(league => {
+  app.get(`/${league.name}/season`, (req, res) => {
+    const data = currentSeasons[league.name];
+    if (!data) {
+      return res.status(503).json({ error: `Noch keine Daten für ${league.name} im Cache` });
+    }
+    res.json(data); // Daten aus dem Cache zurückgeben
+  });
+});
+
 
 // Port definieren 
 const PORT = process.env.PORT || 3000; // Port auf Umgebungsvariable (vom Hosting Anbieter vergeben) oder lokal auf 3000 setzen
